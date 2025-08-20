@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -14,6 +14,7 @@ import bcrypt
 import jwt
 from bson import ObjectId
 import json
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -76,6 +77,18 @@ class ExpenseCreate(BaseModel):
     description: str
     date: datetime
 
+class ExpenseUpdate(BaseModel):
+    amount: Optional[float] = None
+    category_id: Optional[str] = None
+    description: Optional[str] = None
+    date: Optional[datetime] = None
+
+class ExpensesResponse(BaseModel):
+    expenses: List[Expense]
+    total_count: int
+    total_pages: int
+    current_page: int
+
 class Budget(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
@@ -90,12 +103,19 @@ class BudgetCreate(BaseModel):
     category_id: str
     monthly_limit: float
 
+class BudgetUpdate(BaseModel):
+    monthly_limit: Optional[float] = None
+
 class DashboardData(BaseModel):
     total_expenses: float
     monthly_expenses: float
     categories_breakdown: List[dict]
     recent_expenses: List[Expense]
     budget_status: List[dict]
+
+class AlertData(BaseModel):
+    budget_alerts: List[dict]
+    spending_insights: List[dict]
 
 # Utility functions
 def hash_password(password: str) -> str:
@@ -220,7 +240,7 @@ async def get_categories():
     categories = await db.categories.find().to_list(length=None)
     return [Category(**category) for category in categories]
 
-# Expense Routes
+# Enhanced Expense Routes with Pagination and Filtering
 @api_router.post("/expenses", response_model=Expense)
 async def create_expense(expense_data: ExpenseCreate, current_user: User = Depends(get_current_user)):
     # Get category info
@@ -242,13 +262,21 @@ async def create_expense(expense_data: ExpenseCreate, current_user: User = Depen
     
     return expense
 
-@api_router.get("/expenses", response_model=List[Expense])
+@api_router.get("/expenses", response_model=ExpensesResponse)
 async def get_expenses(
     current_user: User = Depends(get_current_user),
-    category_id: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    category_id: Optional[str] = Query(None, description="Filter by category"),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    min_amount: Optional[float] = Query(None, description="Minimum amount"),
+    max_amount: Optional[float] = Query(None, description="Maximum amount"),
+    search: Optional[str] = Query(None, description="Search in description"),
+    sort_by: Optional[str] = Query("date", description="Sort by field"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc/desc)")
 ):
+    # Build query
     query = {"user_id": current_user.id}
     
     if category_id:
@@ -257,18 +285,47 @@ async def get_expenses(
     if start_date or end_date:
         date_query = {}
         if start_date:
-            date_query["$gte"] = start_date
+            date_query["$gte"] = f"{start_date}T00:00:00.000Z"
         if end_date:
-            date_query["$lte"] = end_date
+            date_query["$lte"] = f"{end_date}T23:59:59.999Z"
         query["date"] = date_query
     
-    expenses = await db.expenses.find(query).sort("date", -1).to_list(length=None)
-    return [Expense(**parse_from_mongo(expense)) for expense in expenses]
+    if min_amount is not None or max_amount is not None:
+        amount_query = {}
+        if min_amount is not None:
+            amount_query["$gte"] = min_amount
+        if max_amount is not None:
+            amount_query["$lte"] = max_amount
+        query["amount"] = amount_query
+    
+    if search:
+        query["description"] = {"$regex": search, "$options": "i"}
+    
+    # Build sort
+    sort_direction = -1 if sort_order == "desc" else 1
+    sort_field = sort_by if sort_by in ["date", "amount", "category_name", "created_at"] else "date"
+    
+    # Get total count
+    total_count = await db.expenses.count_documents(query)
+    total_pages = (total_count + limit - 1) // limit
+    
+    # Get expenses with pagination
+    skip = (page - 1) * limit
+    expenses = await db.expenses.find(query).sort(sort_field, sort_direction).skip(skip).limit(limit).to_list(length=None)
+    
+    expense_list = [Expense(**parse_from_mongo(expense)) for expense in expenses]
+    
+    return ExpensesResponse(
+        expenses=expense_list,
+        total_count=total_count,
+        total_pages=total_pages,
+        current_page=page
+    )
 
 @api_router.put("/expenses/{expense_id}", response_model=Expense)
 async def update_expense(
     expense_id: str,
-    expense_data: ExpenseCreate,
+    expense_data: ExpenseUpdate,
     current_user: User = Depends(get_current_user)
 ):
     # Check if expense exists and belongs to user
@@ -276,18 +333,24 @@ async def update_expense(
     if not existing_expense:
         raise HTTPException(status_code=404, detail="Expense not found")
     
-    # Get category info
-    category = await db.categories.find_one({"id": expense_data.category_id})
-    if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
+    # Build update data
+    update_data = {}
+    if expense_data.amount is not None:
+        update_data["amount"] = expense_data.amount
+    if expense_data.description is not None:
+        update_data["description"] = expense_data.description
+    if expense_data.date is not None:
+        update_data["date"] = expense_data.date.isoformat()
+    if expense_data.category_id is not None:
+        # Get new category info
+        category = await db.categories.find_one({"id": expense_data.category_id})
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        update_data["category_id"] = expense_data.category_id
+        update_data["category_name"] = category["name"]
     
-    update_data = prepare_for_mongo({
-        "amount": expense_data.amount,
-        "category_id": expense_data.category_id,
-        "category_name": category["name"],
-        "description": expense_data.description,
-        "date": expense_data.date.isoformat()
-    })
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
     
     await db.expenses.update_one({"id": expense_id}, {"$set": update_data})
     
@@ -301,7 +364,7 @@ async def delete_expense(expense_id: str, current_user: User = Depends(get_curre
         raise HTTPException(status_code=404, detail="Expense not found")
     return {"message": "Expense deleted successfully"}
 
-# Budget Routes
+# Enhanced Budget Routes
 @api_router.post("/budgets", response_model=Budget)
 async def create_budget(budget_data: BudgetCreate, current_user: User = Depends(get_current_user)):
     # Get category info
@@ -361,6 +424,36 @@ async def get_budgets(current_user: User = Depends(get_current_user)):
         budget["spent_amount"] = spent[0]["total"] if spent else 0.0
     
     return [Budget(**parse_from_mongo(budget)) for budget in budgets]
+
+@api_router.put("/budgets/{budget_id}", response_model=Budget)
+async def update_budget(
+    budget_id: str,
+    budget_data: BudgetUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    # Check if budget exists and belongs to user
+    existing_budget = await db.budgets.find_one({"id": budget_id, "user_id": current_user.id})
+    if not existing_budget:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    
+    update_data = {}
+    if budget_data.monthly_limit is not None:
+        update_data["monthly_limit"] = budget_data.monthly_limit
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    await db.budgets.update_one({"id": budget_id}, {"$set": update_data})
+    
+    updated_budget = await db.budgets.find_one({"id": budget_id})
+    return Budget(**parse_from_mongo(updated_budget))
+
+@api_router.delete("/budgets/{budget_id}")
+async def delete_budget(budget_id: str, current_user: User = Depends(get_current_user)):
+    result = await db.budgets.delete_one({"id": budget_id, "user_id": current_user.id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return {"message": "Budget deleted successfully"}
 
 # Dashboard Route
 @api_router.get("/dashboard", response_model=DashboardData)
@@ -448,6 +541,94 @@ async def get_dashboard(current_user: User = Depends(get_current_user)):
         categories_breakdown=categories_breakdown,
         recent_expenses=recent_expenses_list,
         budget_status=budget_status
+    )
+
+# Alerts and Insights Route
+@api_router.get("/alerts", response_model=AlertData)
+async def get_alerts(current_user: User = Depends(get_current_user)):
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    
+    # Get budgets and check for alerts
+    budgets = await db.budgets.find({
+        "user_id": current_user.id,
+        "current_month": current_month
+    }).to_list(length=None)
+    
+    budget_alerts = []
+    for budget in budgets:
+        spent = await db.expenses.aggregate([
+            {
+                "$match": {
+                    "user_id": current_user.id,
+                    "category_id": budget["category_id"],
+                    "date": {
+                        "$gte": f"{current_month}-01T00:00:00.000Z",
+                        "$lt": f"{current_month}-31T23:59:59.999Z"
+                    }
+                }
+            },
+            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+        ]).to_list(1)
+        
+        spent_amount = spent[0]["total"] if spent else 0.0
+        percentage = (spent_amount / budget["monthly_limit"]) * 100 if budget["monthly_limit"] > 0 else 0
+        
+        if percentage >= 90:
+            alert_type = "danger" if percentage >= 100 else "warning"
+            budget_alerts.append({
+                "type": alert_type,
+                "category": budget["category_name"],
+                "message": f"You've spent ${spent_amount:.2f} of ${budget['monthly_limit']:.2f} ({percentage:.1f}%)",
+                "percentage": percentage
+            })
+    
+    # Generate spending insights
+    spending_insights = []
+    
+    # Compare with last month
+    last_month = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m")
+    last_month_total = await db.expenses.aggregate([
+        {
+            "$match": {
+                "user_id": current_user.id,
+                "date": {
+                    "$gte": f"{last_month}-01T00:00:00.000Z",
+                    "$lt": f"{last_month}-31T23:59:59.999Z"
+                }
+            }
+        },
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]).to_list(1)
+    
+    last_month_amount = last_month_total[0]["total"] if last_month_total else 0.0
+    current_month_total = await db.expenses.aggregate([
+        {
+            "$match": {
+                "user_id": current_user.id,
+                "date": {
+                    "$gte": f"{current_month}-01T00:00:00.000Z",
+                    "$lt": f"{current_month}-31T23:59:59.999Z"
+                }
+            }
+        },
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]).to_list(1)
+    
+    current_month_amount = current_month_total[0]["total"] if current_month_total else 0.0
+    
+    if last_month_amount > 0:
+        change_percentage = ((current_month_amount - last_month_amount) / last_month_amount) * 100
+        if abs(change_percentage) > 10:
+            trend = "increased" if change_percentage > 0 else "decreased"
+            spending_insights.append({
+                "type": "trend",
+                "message": f"Your spending has {trend} by {abs(change_percentage):.1f}% compared to last month",
+                "change_percentage": change_percentage
+            })
+    
+    return AlertData(
+        budget_alerts=budget_alerts,
+        spending_insights=spending_insights
     )
 
 # Health check

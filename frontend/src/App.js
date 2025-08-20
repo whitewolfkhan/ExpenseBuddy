@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import './App.css';
 
@@ -15,9 +15,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Progress } from './components/ui/progress';
 import { Textarea } from './components/ui/textarea';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './components/ui/alert-dialog';
 
 // Import icons
-import { CalendarIcon, PlusCircle, TrendingUp, DollarSign, CreditCard, Target, LogOut, Eye, EyeOff, Edit, Trash2, Filter } from 'lucide-react';
+import { CalendarIcon, PlusCircle, TrendingUp, DollarSign, CreditCard, Target, LogOut, Eye, EyeOff, Edit, Trash2, Filter, Search, ArrowUpDown, ChevronLeft, ChevronRight, AlertTriangle, TrendingDown } from 'lucide-react';
 
 // Date utilities
 import { format } from 'date-fns';
@@ -395,6 +396,598 @@ const Dashboard = () => {
   );
 };
 
+// Enhanced Expenses Page Component
+const ExpensesPage = () => {
+  const [expenses, setExpenses] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    category_id: '',
+    start_date: '',
+    end_date: '',
+    min_amount: '',
+    max_amount: '',
+    search: '',
+    sort_by: 'date',
+    sort_order: 'desc'
+  });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total_count: 0,
+    total_pages: 0
+  });
+  const { token } = React.useContext(AuthContext);
+
+  useEffect(() => {
+    fetchCategories();
+    fetchExpenses();
+  }, [filters, pagination.page]);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await axios.get(`${API}/categories`);
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchExpenses = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ''))
+      });
+
+      const response = await axios.get(`${API}/expenses?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setExpenses(response.data.expenses);
+      setPagination(prev => ({
+        ...prev,
+        total_count: response.data.total_count,
+        total_pages: response.data.total_pages
+      }));
+    } catch (error) {
+      console.error('Error fetching expenses:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      category_id: '',
+      start_date: '',
+      end_date: '',
+      min_amount: '',
+      max_amount: '',
+      search: '',
+      sort_by: 'date',
+      sort_order: 'desc'
+    });
+  };
+
+  const handleExpenseUpdate = () => {
+    fetchExpenses();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Navigation currentPage="expenses" />
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-slate-800">Expenses</h1>
+          <AddExpenseDialog onExpenseAdded={handleExpenseUpdate} />
+        </div>
+
+        {/* Filters */}
+        <Card className="shadow-lg border-0">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="w-5 h-5" />
+              Filters & Search
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <Input
+                    placeholder="Search descriptions..."
+                    value={filters.search}
+                    onChange={(e) => handleFilterChange('search', e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Category</label>
+                <Select value={filters.category_id} onValueChange={(value) => handleFilterChange('category_id', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All categories</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.icon} {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Start Date</label>
+                <Input
+                  type="date"
+                  value={filters.start_date}
+                  onChange={(e) => handleFilterChange('start_date', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium">End Date</label>
+                <Input
+                  type="date"
+                  value={filters.end_date}
+                  onChange={(e) => handleFilterChange('end_date', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Min Amount</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={filters.min_amount}
+                  onChange={(e) => handleFilterChange('min_amount', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Max Amount</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="1000.00"
+                  value={filters.max_amount}
+                  onChange={(e) => handleFilterChange('max_amount', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Sort By</label>
+                <Select value={filters.sort_by} onValueChange={(value) => handleFilterChange('sort_by', value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="amount">Amount</SelectItem>
+                    <SelectItem value="category_name">Category</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Order</label>
+                <Select value={filters.sort_order} onValueChange={(value) => handleFilterChange('sort_order', value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">Descending</SelectItem>
+                    <SelectItem value="asc">Ascending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="flex justify-end mt-4">
+              <Button variant="outline" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Expenses List */}
+        <Card className="shadow-lg border-0">
+          <CardHeader>
+            <CardTitle>
+              Expenses ({pagination.total_count} total)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+              </div>
+            ) : expenses.length === 0 ? (
+              <div className="text-center py-8 text-slate-600">
+                <p>No expenses found matching your criteria.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {expenses.map((expense) => (
+                  <ExpenseItem 
+                    key={expense.id} 
+                    expense={expense} 
+                    categories={categories}
+                    onUpdate={handleExpenseUpdate}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.total_pages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+                <p className="text-sm text-slate-600">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total_count)} of {pagination.total_count} results
+                </p>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                    disabled={pagination.page === 1}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-slate-600">
+                    Page {pagination.page} of {pagination.total_pages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                    disabled={pagination.page === pagination.total_pages}
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// Expense Item Component
+const ExpenseItem = ({ expense, categories, onUpdate }) => {
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { token } = React.useContext(AuthContext);
+
+  const handleDelete = async () => {
+    try {
+      await axios.delete(`${API}/expenses/${expense.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      onUpdate();
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      alert('Error deleting expense: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const categoryColor = categories.find(c => c.id === expense.category_id)?.color || '#A5A5A5';
+
+  return (
+    <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-slate-200 hover:shadow-md transition-shadow">
+      <div className="flex items-center space-x-4">
+        <div 
+          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold"
+          style={{ backgroundColor: categoryColor }}
+        >
+          {categories.find(c => c.id === expense.category_id)?.icon || '📝'}
+        </div>
+        <div>
+          <p className="font-semibold text-slate-800">{expense.description}</p>
+          <p className="text-sm text-slate-600">
+            {expense.category_name} • {format(new Date(expense.date), 'MMM dd, yyyy')}
+          </p>
+        </div>
+      </div>
+      
+      <div className="flex items-center space-x-3">
+        <span className="text-xl font-bold text-slate-800">
+          ${expense.amount.toFixed(2)}
+        </span>
+        <div className="flex space-x-1">
+          <EditExpenseDialog 
+            expense={expense} 
+            categories={categories} 
+            onUpdate={onUpdate}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Edit className="w-4 h-4" />
+              </Button>
+            }
+          />
+          
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Expense</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{expense.description}"? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Enhanced Budgets Page Component
+const BudgetsPage = () => {
+  const [budgets, setBudgets] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [alerts, setAlerts] = useState({ budget_alerts: [], spending_insights: [] });
+  const [loading, setLoading] = useState(true);
+  const { token } = React.useContext(AuthContext);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [budgetsRes, categoriesRes, alertsRes] = await Promise.all([
+        axios.get(`${API}/budgets`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/categories`),
+        axios.get(`${API}/alerts`, { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      
+      setBudgets(budgetsRes.data);
+      setCategories(categoriesRes.data);
+      setAlerts(alertsRes.data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Navigation currentPage="budgets" />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading budgets...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Navigation currentPage="budgets" />
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-slate-800">Budgets</h1>
+          <AddBudgetDialog categories={categories} onBudgetAdded={fetchData} />
+        </div>
+
+        {/* Alerts */}
+        {alerts.budget_alerts.length > 0 && (
+          <Card className="shadow-lg border-0 border-l-4 border-l-orange-500">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-orange-700">
+                <AlertTriangle className="w-5 h-5" />
+                Budget Alerts
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {alerts.budget_alerts.map((alert, index) => (
+                  <div key={index} className={`p-3 rounded-lg ${alert.type === 'danger' ? 'bg-red-50 text-red-800' : 'bg-orange-50 text-orange-800'}`}>
+                    <p className="font-medium">{alert.category}</p>
+                    <p className="text-sm">{alert.message}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Spending Insights */}
+        {alerts.spending_insights.length > 0 && (
+          <Card className="shadow-lg border-0 border-l-4 border-l-blue-500">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-700">
+                <TrendingDown className="w-5 h-5" />
+                Spending Insights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {alerts.spending_insights.map((insight, index) => (
+                  <div key={index} className="p-3 bg-blue-50 text-blue-800 rounded-lg">
+                    <p>{insight.message}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Budgets Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {budgets.map((budget) => (
+            <BudgetCard 
+              key={budget.id} 
+              budget={budget} 
+              categories={categories}
+              onUpdate={fetchData} 
+            />
+          ))}
+        </div>
+
+        {budgets.length === 0 && (
+          <Card className="shadow-lg border-0">
+            <CardContent className="p-8 text-center">
+              <Target className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-slate-800 mb-2">No budgets yet</h3>
+              <p className="text-slate-600 mb-4">Create your first budget to start tracking your spending goals.</p>
+              <AddBudgetDialog categories={categories} onBudgetAdded={fetchData} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Budget Card Component
+const BudgetCard = ({ budget, categories, onUpdate }) => {
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { token } = React.useContext(AuthContext);
+
+  const handleDelete = async () => {
+    try {
+      await axios.delete(`${API}/budgets/${budget.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      onUpdate();
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      alert('Error deleting budget: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const category = categories.find(c => c.id === budget.category_id);
+  const percentage = (budget.spent_amount / budget.monthly_limit) * 100;
+  const isOverBudget = percentage > 100;
+
+  return (
+    <Card className={`shadow-lg border-0 ${isOverBudget ? 'border-l-4 border-l-red-500' : ''}`}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div 
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white"
+              style={{ backgroundColor: category?.color || '#A5A5A5' }}
+            >
+              {category?.icon || '📝'}
+            </div>
+            <div>
+              <CardTitle className="text-lg">{budget.category_name}</CardTitle>
+            </div>
+          </div>
+          <div className="flex space-x-1">
+            <EditBudgetDialog 
+              budget={budget} 
+              onUpdate={onUpdate}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Edit className="w-4 h-4" />
+                </Button>
+              }
+            />
+            
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Budget</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete the budget for {budget.category_name}? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-slate-600">Spent</span>
+            <span className="font-semibold">${budget.spent_amount.toFixed(2)}</span>
+          </div>
+          
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-slate-600">Budget</span>
+            <span className="font-semibold">${budget.monthly_limit.toFixed(2)}</span>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-600">Progress</span>
+              <span className={`text-sm font-medium ${isOverBudget ? 'text-red-600' : 'text-emerald-600'}`}>
+                {percentage.toFixed(1)}%
+              </span>
+            </div>
+            <Progress 
+              value={Math.min(percentage, 100)} 
+              className={`h-3 ${isOverBudget ? 'bg-red-100' : 'bg-slate-100'}`}
+            />
+            {isOverBudget && (
+              <p className="text-xs text-red-600 font-medium">
+                Over budget by ${(budget.spent_amount - budget.monthly_limit).toFixed(2)}
+              </p>
+            )}
+          </div>
+          
+          <div className="text-xs text-slate-500">
+            Remaining: ${Math.max(0, budget.monthly_limit - budget.spent_amount).toFixed(2)}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 // Add Expense Dialog Component
 const AddExpenseDialog = ({ onExpenseAdded }) => {
   const [open, setOpen] = useState(false);
@@ -529,37 +1122,265 @@ const AddExpenseDialog = ({ onExpenseAdded }) => {
   );
 };
 
-// Expenses Page (placeholder for now)
-const ExpensesPage = () => {
+// Edit Expense Dialog Component
+const EditExpenseDialog = ({ expense, categories, onUpdate, trigger }) => {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    amount: expense.amount.toString(),
+    category_id: expense.category_id,
+    description: expense.description,
+    date: new Date(expense.date)
+  });
+  const [loading, setLoading] = useState(false);
+  const { token } = React.useContext(AuthContext);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      await axios.put(`${API}/expenses/${expense.id}`, {
+        amount: parseFloat(formData.amount),
+        category_id: formData.category_id,
+        description: formData.description,
+        date: formData.date.toISOString()
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setOpen(false);
+      onUpdate();
+    } catch (error) {
+      alert('Error updating expense: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation currentPage="expenses" />
-      <div className="max-w-7xl mx-auto p-6">
-        <h1 className="text-3xl font-bold text-slate-800 mb-6">Expenses</h1>
-        <Card className="shadow-lg border-0">
-          <CardContent className="p-8 text-center">
-            <p className="text-slate-600">Detailed expenses page coming soon...</p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Expense</DialogTitle>
+          <DialogDescription>Update the expense details.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Amount</label>
+            <Input
+              type="number"
+              step="0.01"
+              value={formData.amount}
+              onChange={(e) => setFormData({...formData, amount: e.target.value})}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Category</label>
+            <Select value={formData.category_id} onValueChange={(value) => setFormData({...formData, category_id: value})}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.icon} {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Description</label>
+            <Textarea
+              value={formData.description}
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Date</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-start text-left font-normal">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {format(formData.date, "PPP")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={formData.date}
+                  onSelect={(date) => setFormData({...formData, date: date || new Date()})}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600">
+              {loading ? 'Updating...' : 'Update Expense'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 
-// Budgets Page (placeholder for now)
-const BudgetsPage = () => {
+// Add Budget Dialog Component
+const AddBudgetDialog = ({ categories, onBudgetAdded }) => {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    category_id: '',
+    monthly_limit: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const { token } = React.useContext(AuthContext);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      await axios.post(`${API}/budgets`, {
+        category_id: formData.category_id,
+        monthly_limit: parseFloat(formData.monthly_limit)
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setOpen(false);
+      setFormData({ category_id: '', monthly_limit: '' });
+      onBudgetAdded();
+    } catch (error) {
+      alert('Error creating budget: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation currentPage="budgets" />
-      <div className="max-w-7xl mx-auto p-6">
-        <h1 className="text-3xl font-bold text-slate-800 mb-6">Budgets</h1>
-        <Card className="shadow-lg border-0">
-          <CardContent className="p-8 text-center">
-            <p className="text-slate-600">Budget management page coming soon...</p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700">
+          <PlusCircle className="w-4 h-4 mr-2" />
+          Add Budget
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create New Budget</DialogTitle>
+          <DialogDescription>Set a monthly spending limit for a category.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Category</label>
+            <Select value={formData.category_id} onValueChange={(value) => setFormData({...formData, category_id: value})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.icon} {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Monthly Limit</label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="500.00"
+              value={formData.monthly_limit}
+              onChange={(e) => setFormData({...formData, monthly_limit: e.target.value})}
+              required
+            />
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600">
+              {loading ? 'Creating...' : 'Create Budget'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Edit Budget Dialog Component
+const EditBudgetDialog = ({ budget, onUpdate, trigger }) => {
+  const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    monthly_limit: budget.monthly_limit.toString()
+  });
+  const [loading, setLoading] = useState(false);
+  const { token } = React.useContext(AuthContext);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      await axios.put(`${API}/budgets/${budget.id}`, {
+        monthly_limit: parseFloat(formData.monthly_limit)
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setOpen(false);
+      onUpdate();
+    } catch (error) {
+      alert('Error updating budget: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Budget</DialogTitle>
+          <DialogDescription>Update the monthly limit for {budget.category_name}.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Monthly Limit</label>
+            <Input
+              type="number"
+              step="0.01"
+              value={formData.monthly_limit}
+              onChange={(e) => setFormData({...formData, monthly_limit: e.target.value})}
+              required
+            />
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600">
+              {loading ? 'Updating...' : 'Update Budget'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 
