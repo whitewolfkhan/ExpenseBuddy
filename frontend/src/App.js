@@ -184,8 +184,25 @@ const AuthPage = () => {
 };
 
 // Navigation Component
-const Navigation = ({ currentPage, onNavigate }) => {
+const Navigation = ({ currentPage }) => {
   const { user, logout } = React.useContext(AuthContext);
+  const navigate = useNavigate();
+
+  const handleNavigate = (page) => {
+    switch(page) {
+      case 'dashboard':
+        navigate('/');
+        break;
+      case 'expenses':
+        navigate('/expenses');
+        break;
+      case 'budgets':
+        navigate('/budgets');
+        break;
+      default:
+        navigate('/');
+    }
+  };
 
   return (
     <nav className="bg-white border-b border-slate-200 shadow-sm">
@@ -201,21 +218,21 @@ const Navigation = ({ currentPage, onNavigate }) => {
             <div className="hidden md:flex space-x-1">
               <Button
                 variant={currentPage === 'dashboard' ? 'default' : 'ghost'}
-                onClick={() => onNavigate('dashboard')}
+                onClick={() => handleNavigate('dashboard')}
                 className="font-medium"
               >
                 Dashboard
               </Button>
               <Button
                 variant={currentPage === 'expenses' ? 'default' : 'ghost'}
-                onClick={() => onNavigate('expenses')}
+                onClick={() => handleNavigate('expenses')}
                 className="font-medium"
               >
                 Expenses
               </Button>
               <Button
                 variant={currentPage === 'budgets' ? 'default' : 'ghost'}
-                onClick={() => onNavigate('budgets')}
+                onClick={() => handleNavigate('budgets')}
                 className="font-medium"
               >
                 Budgets
