@@ -358,7 +358,7 @@ class ExpenseBuddyAPITester:
 
     def run_all_tests(self):
         """Run all API tests in sequence"""
-        print("🚀 Starting ExpenseBuddy API Tests")
+        print("🚀 Starting ExpenseBuddy Enhanced API Tests")
         print("=" * 50)
         
         # Test 1: Health Check
@@ -399,19 +399,60 @@ class ExpenseBuddyAPITester:
             print("❌ Create expense failed")
             return False
             
-        # Test 8: Get Expenses
-        if not self.test_get_expenses():
-            print("❌ Get expenses failed")
+        # Test 8: Get Expenses (Basic)
+        if not self.test_get_expenses_basic():
+            print("❌ Get expenses (basic) failed")
             return False
             
-        # Test 9: Create Budget
-        if not self.test_create_budget(categories):
+        # Test 9: Get Expenses with Pagination
+        if not self.test_get_expenses_with_pagination():
+            print("❌ Get expenses with pagination failed")
+            return False
+            
+        # Test 10: Get Expenses with Filters
+        if not self.test_get_expenses_with_filters(categories):
+            print("❌ Get expenses with filters failed")
+            return False
+            
+        # Test 11: Get Expenses with Sorting
+        if not self.test_get_expenses_with_sorting():
+            print("❌ Get expenses with sorting failed")
+            return False
+            
+        # Test 12: Update Expense
+        if not self.test_update_expense(expense_id, categories):
+            print("❌ Update expense failed")
+            return False
+            
+        # Test 13: Create Budget
+        budget_success, budget_id = self.test_create_budget(categories)
+        if not budget_success:
             print("❌ Create budget failed")
             return False
             
-        # Test 10: Get Budgets
+        # Test 14: Get Budgets
         if not self.test_get_budgets():
             print("❌ Get budgets failed")
+            return False
+            
+        # Test 15: Update Budget
+        if not self.test_update_budget(budget_id):
+            print("❌ Update budget failed")
+            return False
+            
+        # Test 16: Get Alerts
+        if not self.test_get_alerts():
+            print("❌ Get alerts failed")
+            return False
+            
+        # Test 17: Delete Expense
+        if not self.test_delete_expense(expense_id):
+            print("❌ Delete expense failed")
+            return False
+            
+        # Test 18: Delete Budget
+        if not self.test_delete_budget(budget_id):
+            print("❌ Delete budget failed")
             return False
             
         return True
