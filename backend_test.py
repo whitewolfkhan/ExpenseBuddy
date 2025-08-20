@@ -288,7 +288,7 @@ class ExpenseBuddyAPITester:
         """Test creating a budget"""
         if not categories:
             print("❌ No categories available for budget creation")
-            return False
+            return False, None
             
         category = categories[1] if len(categories) > 1 else categories[0]
         budget_data = {
@@ -304,7 +304,10 @@ class ExpenseBuddyAPITester:
             data=budget_data
         )
         
-        return success
+        if success and 'id' in response:
+            print(f"   Budget created with ID: {response['id']}")
+            return True, response['id']
+        return False, None
 
     def test_get_budgets(self):
         """Test getting user budgets"""
@@ -312,6 +315,44 @@ class ExpenseBuddyAPITester:
             "Get Budgets",
             "GET",
             "budgets",
+            200
+        )
+
+    def test_update_budget(self, budget_id):
+        """Test updating a budget"""
+        if not budget_id:
+            return False
+            
+        update_data = {
+            "monthly_limit": 750.00
+        }
+        
+        return self.run_test(
+            "Update Budget",
+            "PUT",
+            f"budgets/{budget_id}",
+            200,
+            data=update_data
+        )
+
+    def test_delete_budget(self, budget_id):
+        """Test deleting a budget"""
+        if not budget_id:
+            return False
+            
+        return self.run_test(
+            "Delete Budget",
+            "DELETE",
+            f"budgets/{budget_id}",
+            200
+        )
+
+    def test_get_alerts(self):
+        """Test getting budget alerts and spending insights"""
+        return self.run_test(
+            "Get Alerts",
+            "GET",
+            "alerts",
             200
         )
 
