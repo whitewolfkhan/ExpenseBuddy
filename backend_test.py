@@ -136,7 +136,7 @@ class ExpenseBuddyAPITester:
             "Dashboard Without Auth",
             "GET",
             "dashboard",
-            401
+            403  # FastAPI returns 403 for missing auth
         )
         self.token = old_token
         return success
