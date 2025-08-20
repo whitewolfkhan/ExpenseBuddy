@@ -177,12 +177,110 @@ class ExpenseBuddyAPITester:
             return True, response['id']
         return False, None
 
-    def test_get_expenses(self):
-        """Test getting user expenses"""
+    def test_get_expenses_basic(self):
+        """Test getting user expenses (basic)"""
         return self.run_test(
-            "Get Expenses",
+            "Get Expenses (Basic)",
             "GET",
             "expenses",
+            200
+        )
+
+    def test_get_expenses_with_pagination(self):
+        """Test expenses with pagination"""
+        return self.run_test(
+            "Get Expenses (Pagination)",
+            "GET",
+            "expenses?page=1&limit=5",
+            200
+        )
+
+    def test_get_expenses_with_filters(self, categories):
+        """Test expenses with advanced filters"""
+        if not categories:
+            return False
+            
+        category_id = categories[0]['id']
+        # Test category filter
+        success1, _ = self.run_test(
+            "Get Expenses (Category Filter)",
+            "GET",
+            f"expenses?category_id={category_id}",
+            200
+        )
+        
+        # Test amount range filter
+        success2, _ = self.run_test(
+            "Get Expenses (Amount Filter)",
+            "GET",
+            "expenses?min_amount=10&max_amount=100",
+            200
+        )
+        
+        # Test search filter
+        success3, _ = self.run_test(
+            "Get Expenses (Search Filter)",
+            "GET",
+            "expenses?search=lunch",
+            200
+        )
+        
+        # Test date range filter
+        success4, _ = self.run_test(
+            "Get Expenses (Date Filter)",
+            "GET",
+            "expenses?start_date=2024-01-01&end_date=2024-12-31",
+            200
+        )
+        
+        return success1 and success2 and success3 and success4
+
+    def test_get_expenses_with_sorting(self):
+        """Test expenses with sorting"""
+        success1, _ = self.run_test(
+            "Get Expenses (Sort by Amount Desc)",
+            "GET",
+            "expenses?sort_by=amount&sort_order=desc",
+            200
+        )
+        
+        success2, _ = self.run_test(
+            "Get Expenses (Sort by Date Asc)",
+            "GET",
+            "expenses?sort_by=date&sort_order=asc",
+            200
+        )
+        
+        return success1 and success2
+
+    def test_update_expense(self, expense_id, categories):
+        """Test updating an expense"""
+        if not expense_id or not categories:
+            return False
+            
+        update_data = {
+            "amount": 35.75,
+            "description": "Updated test expense",
+            "category_id": categories[0]['id']
+        }
+        
+        return self.run_test(
+            "Update Expense",
+            "PUT",
+            f"expenses/{expense_id}",
+            200,
+            data=update_data
+        )
+
+    def test_delete_expense(self, expense_id):
+        """Test deleting an expense"""
+        if not expense_id:
+            return False
+            
+        return self.run_test(
+            "Delete Expense",
+            "DELETE",
+            f"expenses/{expense_id}",
             200
         )
 
