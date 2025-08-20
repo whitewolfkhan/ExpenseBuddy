@@ -186,23 +186,9 @@ const AuthPage = () => {
 // Navigation Component
 const Navigation = ({ currentPage }) => {
   const { user, logout } = React.useContext(AuthContext);
-  const navigate = useNavigate();
-
-  const handleNavigate = (page) => {
-    switch(page) {
-      case 'dashboard':
-        navigate('/');
-        break;
-      case 'expenses':
-        navigate('/expenses');
-        break;
-      case 'budgets':
-        navigate('/budgets');
-        break;
-      default:
-        navigate('/');
-    }
-  };
+  const navigate = React.useCallback((path) => {
+    window.location.href = `/${path === 'dashboard' ? '' : path}`;
+  }, []);
 
   return (
     <nav className="bg-white border-b border-slate-200 shadow-sm">
@@ -218,21 +204,21 @@ const Navigation = ({ currentPage }) => {
             <div className="hidden md:flex space-x-1">
               <Button
                 variant={currentPage === 'dashboard' ? 'default' : 'ghost'}
-                onClick={() => handleNavigate('dashboard')}
+                onClick={() => navigate('dashboard')}
                 className="font-medium"
               >
                 Dashboard
               </Button>
               <Button
                 variant={currentPage === 'expenses' ? 'default' : 'ghost'}
-                onClick={() => handleNavigate('expenses')}
+                onClick={() => navigate('expenses')}
                 className="font-medium"
               >
                 Expenses
               </Button>
               <Button
                 variant={currentPage === 'budgets' ? 'default' : 'ghost'}
-                onClick={() => handleNavigate('budgets')}
+                onClick={() => navigate('budgets')}
                 className="font-medium"
               >
                 Budgets
