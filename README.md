@@ -1,13 +1,13 @@
 # ExpenseBuddy: Personal Finance and Expense Tracker
 
-![ExpenseBuddy Logo](https://img.shields.io/badge/ExpenseBuddy-v1.0.0-blue?style=for-the-badge&logo=react&logoColor=61DAFB)
+
 
 
 A comprehensive personal finance management application that helps users track expenses, manage budgets, and gain insights into their financial habits.
 
 
 ## Screenshots
-![ExpenseBuddy](<img width="1366" height="628" alt="Screenshot (133)" src="https://github.com/user-attachments/assets/6d9f029a-f385-4c42-a9cc-04c9634337b4" />
+!(<img width="1366" height="628" alt="Screenshot (133)" src="https://github.com/user-attachments/assets/6d9f029a-f385-4c42-a9cc-04c9634337b4" />
 )
 
 
